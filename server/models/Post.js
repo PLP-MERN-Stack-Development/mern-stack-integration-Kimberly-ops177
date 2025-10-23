@@ -1,100 +1,105 @@
-// Post.js - Mongoose model for blog posts
+import mongoose from 'mongoose';
 
-const mongoose = require('mongoose');
-
-const PostSchema = new mongoose.Schema(
+const commentSchema = new mongoose.Schema(
   {
-    title: {
+    author: {
       type: String,
-      required: [true, 'Please provide a title'],
-      trim: true,
-      maxlength: [100, 'Title cannot be more than 100 characters'],
+      required: [true, 'Comment author is required'],
+      trim: true
     },
     content: {
       type: String,
-      required: [true, 'Please provide content'],
+      required: [true, 'Comment content is required'],
+      trim: true,
+      minlength: [1, 'Comment must be at least 1 character'],
+      maxlength: [500, 'Comment cannot exceed 500 characters']
     },
-    featuredImage: {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+
+const postSchema = new mongoose.Schema(
+  {
+    title: {
       type: String,
-      default: 'default-post.jpg',
+      required: [true, 'Post title is required'],
+      trim: true,
+      minlength: [3, 'Title must be at least 3 characters'],
+      maxlength: [200, 'Title cannot exceed 200 characters']
     },
     slug: {
       type: String,
-      required: true,
       unique: true,
+      lowercase: true
+    },
+    content: {
+      type: String,
+      required: [true, 'Post content is required'],
+      minlength: [10, 'Content must be at least 10 characters']
     },
     excerpt: {
       type: String,
-      maxlength: [200, 'Excerpt cannot be more than 200 characters'],
+      maxlength: [300, 'Excerpt cannot exceed 300 characters']
     },
     author: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: true
     },
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category',
-      required: true,
+      required: [true, 'Post category is required']
     },
-    tags: [String],
-    isPublished: {
+    tags: [{
+      type: String,
+      trim: true
+    }],
+    featuredImage: {
+      type: String,
+      default: ''
+    },
+    published: {
       type: Boolean,
-      default: false,
+      default: false
     },
-    viewCount: {
+    views: {
       type: Number,
-      default: 0,
+      default: 0
     },
-    comments: [
-      {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
-        },
-        content: {
-          type: String,
-          required: true,
-        },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
+    comments: [commentSchema]
   },
-  { timestamps: true }
+  {
+    timestamps: true
+  }
 );
 
-// Create slug from title before saving
-PostSchema.pre('save', function (next) {
-  if (!this.isModified('title')) {
-    return next();
+// Generate slug before saving
+postSchema.pre('save', function(next) {
+  if (this.isModified('title')) {
+    this.slug = this.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
   
-  this.slug = this.title
-    .toLowerCase()
-    .replace(/[^\w ]+/g, '')
-    .replace(/ +/g, '-');
-    
+  // Generate excerpt from content if not provided
+  if (!this.excerpt && this.content) {
+    this.excerpt = this.content.substring(0, 150) + '...';
+  }
+  
   next();
 });
 
-// Virtual for post URL
-PostSchema.virtual('url').get(function () {
-  return `/posts/${this.slug}`;
-});
+// Index for search functionality
+postSchema.index({ title: 'text', content: 'text', tags: 'text' });
 
-// Method to add a comment
-PostSchema.methods.addComment = function (userId, content) {
-  this.comments.push({ user: userId, content });
-  return this.save();
-};
+const Post = mongoose.model('Post', postSchema);
 
-// Method to increment view count
-PostSchema.methods.incrementViewCount = function () {
-  this.viewCount += 1;
-  return this.save();
-};
-
-module.exports = mongoose.model('Post', PostSchema); 
+export default Post;
